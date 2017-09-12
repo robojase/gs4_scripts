@@ -201,9 +201,9 @@ if script.vars[1] =~ /^tier(up|3)$/
 elsif script.vars[1] =~ /^aim=(on|off)$/
 	option = $1
 	if option == 'on'
-		CharSettings['aim']=true
+		CharSettings['aim'] = true
 	elsif option == 'off'
-		CharSettings['aim']=false
+		CharSettings['aim'] = false
 	else
 		respond "Bad option: #{option}"
 		exit
@@ -217,17 +217,17 @@ elsif script.vars[1] =~ /spam=?(?<flag>on|off)?/
   respond "Spammy wait is currently #{CharSettings['spam']}"
 	exit
 elsif script.vars[1] =~ /^toohigh$|cannot aim that high/
-		if script.vars[2..-1].length == 0
-				respond "No body parts specified"
-				respond "Try ;#{script.name} help"
-				respond
-				exit
-		end
-		CharSettings['toohigh'] = script.vars[2..-1].join(' ')
-		respond "Now aiming at:"
-		respond "#{CharSettings['toohigh']}"
-		respond "if you can't reach your aiming location"
+	if script.vars[2..-1].length == 0
+		respond "No body parts specified"
+		respond "Try ;#{script.name} help"
+		respond
 		exit
+	end
+	CharSettings['toohigh'] = script.vars[2..-1].join(' ')
+	respond "Now aiming at:"
+	respond "#{CharSettings['toohigh']}"
+	respond "if you can't reach your aiming location"
+	exit
 elsif script.vars[1] =~ /^aim$/
 	unless CharSettings['aim']
 		respond "Aiming is turned off."
