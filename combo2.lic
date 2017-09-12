@@ -84,8 +84,6 @@
 
 =end
 
-before_dying {fput "stance #{CharSettings['stance']}"}
-
 class AttackResult
   # Class encapsulating the results of an attack for reasoning, focusing on UAC results
   attr_accessor :position, :nextStrike, :endroll, :rt, :badAim, :tooHigh
@@ -287,6 +285,8 @@ unless CharSettings['tier3']
 	respond "The script will now exit."
 	exit
 end
+
+before_dying {fput "stance #{CharSettings['stance']}"}
 
 put 'aim clear'
 fput 'stance off'
