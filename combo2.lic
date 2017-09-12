@@ -191,6 +191,7 @@ findTarget = proc { |target = "random"|
 CharSettings['aim'] ||= false
 CharSettings['aim_location'] ||= Array.new
 CharSettings['stance'] ||= 'defensive'
+CharSettings['spam'] ||= 'off'
 
 if script.vars[1] =~ /^tier(up|3)$/
 	CharSettings["tier#{$1}"] = script.vars[2]
@@ -208,6 +209,12 @@ elsif script.vars[1] =~ /^aim=(on|off)$/
 		exit
 	end
 	respond "Turning aiming #{option}"
+	exit
+elsif script.vars[1] =~ /spam=?(?<flag>on|off)?/
+  if $~[:flag]
+    CharSettings['spam'] = $~[:flag]
+  end
+  respond "Spammy wait is currently #{CharSettings['spam']}"
 	exit
 elsif script.vars[1] =~ /^toohigh$|cannot aim that high/
 		if script.vars[2..-1].length == 0
@@ -328,8 +335,11 @@ while @target.status !~ /dead|gone/
 	end
 
   #Tries to be faster, but can be spammier
-	#sleep [0, nextAttackResult.rt - 1].max
-	waitrt?
+  if CharSettings['spam']
+  	sleep [0, nextAttackResult.rt - 1].max
+  else
+  	waitrt?
+  end
 	#Store state for only testing for tierup events
 	currentAttackResult = nextAttackResult
 	#Make attacks
