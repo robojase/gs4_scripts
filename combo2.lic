@@ -1,0 +1,343 @@
+=begin
+
+	Welcome Combo Script Version 2!
+
+	This script will do UCS fighting for you!
+	It will start with JAB and take advantage of Tier Up opportunities.
+
+	Once it has achieved Tier 3, it will always continue with your specified Tier attack.
+
+	-Changelog:
+		v2:
+		-Completely rewritten to include debug messages
+		-Now correctly tier's up to Tier 3 instead of getting stuck in one attack
+		-Will default back to jab to achieve higher Tiers if not at highest Tier.
+		-Added detection of hit/miss, will continue the vulnerable attack until success
+
+		v2.1:
+		-Added setting of your default tier 3 attack
+
+		v2.2:
+		-Added waiting for RT to end, spam attacks 1 second before rt ends.
+
+		v2.3:
+		-Making it stop after killing one target.
+		-Added tierup settings and tier3 attack settings.
+
+		v2.4:
+		-Added aiming
+
+		v2.5:
+		-Caught kicking while lying down
+		-Caught stunned/webbed/generic failures
+
+		v2.6:
+		-Doesn't aim your jabs for faster tier up.
+
+		v2.7
+		-Fixed broken aiming cycling.
+
+		v2.8
+		-Added exiting when the target is dead (probably)
+
+		v2.9
+		-Damn you calm bastards
+
+		v3.0
+		-Added stand check
+		-Added ability to specify a target
+		(Alllll untested!!! So use at your own damn risk!!)
+
+		v3.1
+		-Changed pause to sleep for lich 4.6 update
+
+		v3.2
+		-Stance option
+
+		v3.3
+			-The moment Takoa butchered this script!
+			-Direct all complaints regarding the following issues to Takoa:
+
+			-Will focus mstrike using your tier3 attack when possible
+			-If you have Krynch active, will try to <tier3> your <aim> location first
+				if mstrike is on cooldown
+			-Exits if your bigshot ALWAYS FLEE FROM or FLEE COUNT conditions are met
+				if bigshot is running, ignores otherwise
+			-Has a new TOOHIGH setting for aimed attacks for taller targets, will go to that
+				if you get a "cannot reach" message. For instance, if you set your normal
+				aim location to be "head", and your "toohigh" to be "left leg" it will
+				always try to punch the head first, if you get the "too high" message it
+				will then switch to the left leg. Once the head is reachable it will then
+				hit that again
+			-Will now only try to mstrike if you have >= 30 ranks of MOC. Noobs.
+			-Fixed bug that wasn't starting attack routine when krynch not active
+
+		v3.4
+		-Now targets crap with weird names. Thank Genstealer for complaining about it.
+
+		v3.5
+		-Refactoring to make code more readable
+		-Improve efficiency to no longer process every line of input
+		- AttackResults are now parsed into a standalone class for easier logic
+
+	-Drafix
+
+=end
+
+before_dying {fput "stance #{CharSettings['stance']}"}
+
+class AttackResult
+  # Class encapsulating the results of an attack for reasoning, focusing on UAC results
+  attr_accessor :position, :nextStrike, :endroll, :rt, :badAim, :tooHigh
+
+	def initialize(position = "invalid", nextStrike = nil, endroll = -1, rt = 0, badAim=false, tooHigh = false)
+		@position = {"decent" => 1, "good" => 2, "excellent" => 3}.fetch(position, -1)
+		@nextStrike = nextStrike
+		@endroll = endroll
+		@rt = rt.to_i
+		@badAim = badAim
+		@tooHigh = tooHigh
+	end
+
+	def is_hit?
+		@endroll.to_i > 100 || @endroll == 0
+	end
+
+	def isMaxTier?
+		return @position == 3
+	end
+
+end
+
+parse_attack_block = proc {
+  position='decent'
+	strike=nil
+	endroll=-1
+	rt=0
+	badAim = false
+	tooHigh = false
+
+	timeoutStart = Time.now
+	while line = get
+		case line
+			when /You have (decent|good|excellent) positioning/ #Detect position
+				position = $1
+			when /Strike leaves foe vulnerable to a followup (\w+) attack!/ #Detect next strike
+				strike = $1
+			when /.* = .* d100: .* = (?<endroll>\-?\d+)$|A (?<hit>hit)!$/
+				endroll = $~[:hit] ? 100 : $~[:endroll]
+			when /^Roundtime: (?<rt>\d+)|^\.\.\.wait (?<rt>\d+)/
+				rt = $~[:rt]
+				break
+			when /What were you referring to\?/
+				break
+			when /is already missing that!|does not have a/
+				badAim = true
+				break
+			when /cannot aim that high/
+				tooHigh = true
+				break
+			when /You currently have no valid target\.  You will need to specify one\.|^What were you referring to\?$|Sorry,|You can't do that while entangled in a web|You are still stunned|You are unable to muster the will to attack anything\./ #Attack didn't work, give up now
+				break
+		end
+    #If an attack takes more than a second to parse, assume it's invalid
+		if Time.now - timeoutStart > 1.0
+			position = -1
+			break
+		end
+	end
+	AttackResult.new(position, strike, endroll, rt, badAim, tooHigh)
+}
+
+attack = proc { |target|
+	exit if target.status =~ /dead/
+	if running? 'bigshot'
+			exit if GameObj.npcs.any? { |i| UserVars.op['always_flee_from'].split.include?(i.noun) }
+			exit if GameObj.npcs.length > UserVars.op['flee_count'].to_i
+	end
+
+	fput "stand" unless standing?
+	put 'stance offensive' unless percentstance(0)
+
+	script.clear
+	if Skills.multiopponentcombat.to_i >= 30 and !Spell[9005].active? and !Spell[9699].active? and !Spell[506].active?
+		put "mstrike #{CharSettings['tier3']} ##{target.id}"
+		res = parse_attack_block.call
+		@mstrike_taken = true
+	else
+		@mstrike_taken = false
+		location = ""
+		if CharSettings['aim'] && @action !~ /jab/
+		  location = @location
+		end
+		res = AttackResult.new()
+		#Try one a second to attack until we parse a valid attack
+		while res.position == -1
+			fput "#{@action} ##{target.id} #{location}"
+			res = parse_attack_block.call
+		end
+	end
+	res
+}
+
+findTarget = proc { |target = "random"|
+	status_tags
+	put "target #{target}"
+	line = get until line =~ /^Usage|^You are now targeting <pushBold\/>.* <a exist="(\-?\d+)" noun=".*>\.$|^You do not have a target\.|You can only target creatures and players\.|You can't target|^Could not find a valid target\./
+	status_tags
+	GameObj[$1]
+}
+
+CharSettings['aim'] ||= false
+CharSettings['aim_location'] ||= Array.new
+CharSettings['stance'] ||= 'defensive'
+
+if script.vars[1] =~ /^tier(up|3)$/
+	CharSettings["tier#{$1}"] = script.vars[2]
+	respond "You have specified #{CharSettings["tier#{$1}"]} as your Tier#{$1} attack"
+	respond "You can change this setting by typing ;#{script.name} tier#{$1} <jab/punch/grapple/kick>"
+	exit
+elsif script.vars[1] =~ /^aim=(on|off)$/
+	option = $1
+	if option == 'on'
+		CharSettings['aim']=true
+	elsif option == 'off'
+		CharSettings['aim']=false
+	else
+		respond "Bad option: #{option}"
+		exit
+	end
+	respond "Turning aiming #{option}"
+	exit
+elsif script.vars[1] =~ /^toohigh$|cannot aim that high/
+		if script.vars[2..-1].length == 0
+				respond "No body parts specified"
+				respond "Try ;#{script.name} help"
+				respond
+				exit
+		end
+		CharSettings['toohigh'] = script.vars[2..-1].join(' ')
+		respond "Now aiming at:"
+		respond "#{CharSettings['toohigh']}"
+		respond "if you can't reach your aiming location"
+		exit
+elsif script.vars[1] =~ /^aim$/
+	unless CharSettings['aim']
+		respond "Aiming is turned off."
+		respond "Please enable aiming before using this option"
+		respond ";#{script.name} aim=<on/off>"
+		respond
+		exit
+	end
+	if script.vars[2..-1].length == 0
+		respond "No body parts specified"
+		respond "Try ;#{script.name} help"
+		respond
+		exit
+	end
+	CharSettings['aim_location'].clear
+	script.vars[2..-1].join(' ').gsub(', ', ',').split(',').reverse.each{|location|
+		CharSettings['aim_location'].push(location)
+	}
+	respond "Now aiming in this order (one body part per line):"
+	respond CharSettings['aim_location'].reverse
+	respond
+	respond "Note: Remember to use a comma to separate the body parts"
+	respond
+	exit
+elsif script.vars[1] =~ /^stance$/
+	CharSettings['stance'] = script.vars[2]
+	respond "Will now go to stance #{CharSettings['stance']} after combat"
+	exit
+elsif script.vars[1] =~ /^help$/
+	respond "Setup your tierup and tier3 attacks by typing:  "
+	respond
+	respond ";#{script.name} tierup <jab/punch/grapple/kick>"
+	respond ";#{script.name} tier3 <jab/punch/grapple/kick>"
+	respond
+	respond ";#{script.name} aim=<on/off>"
+	respond ";#{script.name} aim <body parts>"
+	respond " ex: ;#{script.name} aim head, neck, right arm, chest"
+	respond
+	respond ";#{script.name} stance <offensive/defensive/neutral/whatever>"
+	respond "Will set your stance after combat"
+	respond
+	exit
+end
+unless CharSettings['tierup']
+	respond
+	respond "Please specify what attack you want to use trying to tier-up"
+	respond "By typing ;#{script.name} tierup <jab/punch/grapple/kick> [Recommended that you use jab for easy tier-up]"
+	respond
+	respond "The script will now exit."
+	exit
+end
+unless CharSettings['tier3']
+	respond
+	respond "Please specify what attack you want to use when you reach Tier 3"
+	respond "By typing ;#{script.name} tier3 <punch/grapple/kick>"
+	respond
+	respond "The script will now exit."
+	exit
+end
+
+put 'aim clear'
+fput 'stance off'
+@action =  CharSettings['tierup']
+@position='decent'
+@hit=true
+@debug=false
+
+if script.vars.empty?
+  @target = findTarget.call
+else
+  @target = findTarget.call script.vars[0]
+end
+if @target.nil?
+	echo "No target found.  Exiting."
+	exit
+end
+locations = CharSettings['aim_location'].dup
+@location = locations.pop
+#Rolling Krynch Stance defaults to tier3 only
+if Spell[9620].active?
+  @action = CharSettings['tier3']
+end
+
+currentAttackResult = AttackResult.new()
+nextAttackResult = attack.call @target
+
+#Attack until the target is dead or gone
+while @target.status !~ /dead|gone/
+	resetLocation = false
+  if !nextAttackResult.nextStrike.nil? #Parsed tier up attack
+		@action = nextAttackResult.nextStrike
+	elsif nextAttackResult.position > currentAttackResult.position
+		if nextAttackResult.isMaxTier?
+		  @action = CharSettings["tier3"]
+		else
+		  @action = 'jab'
+		end
+	elsif nextAttackResult.badAim
+		@location = locations.pop
+		put 'aim clear' unless @location
+	elsif nextAttackResult.tooHigh
+		@location = CharSettings['toohigh']
+		resetLocation = true
+		locations = CharSettings['aim_location'].dup
+	end
+
+  #Tries to be faster, but can be spammier
+	#sleep [0, nextAttackResult.rt - 1].max
+	waitrt?
+	#Store state for only testing for tierup events
+	currentAttackResult = nextAttackResult
+	#Make attacks
+  nextAttackResult = attack.call @target
+	#Reset location for tooHigh option
+	if resetLocation
+		@location = locations.pop
+	end
+end
+
+waitrt
