@@ -409,7 +409,8 @@ stow_herb = proc { |herb|
 
 # Heals self if foraging goes fumbly
 heal_self = proc {
-  if (limb_repair = Spell[1102]) and limb_repair.known? and limb_repair.affordable?
+  limb_repair = Spell[1102]
+  if limb_repair.known? and limb_repair.affordable?
     limb_repair.cast
   else
     start_script 'useherbs'
