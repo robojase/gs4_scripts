@@ -399,10 +399,11 @@ get_to_dest = proc { |room|
 
 # Stows herb, opening and closing lootsack as required
 stow_herb = proc { |herb|
-  line = dothistimeout "put ##{herb.id} in ##{lootsack.id}", 3, /put|closed/
+  stow_cmd = "put ##{herb.id} in ##{lootsack.id}"
+  line = dothistimeout stow_cmd, 3, /put|closed/
   if line =~ /closed/
     fput "open ##{lootsack.id}"
-    stow_herb.call herb
+    fput stow_cmd
     fput "close ##{lootsack.id}"
   end
 }
