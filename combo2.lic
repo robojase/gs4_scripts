@@ -127,7 +127,8 @@ parse_attack_block = proc {
 			when /^Roundtime: (?<rt>\d+)|^\.\.\.wait (?<rt>\d+)/
 				rt = $~[:rt]
 				break
-			when /What were you referring to\?/
+			when /What were you referring to\?|It looks like somebody already did the job for you\./
+				position = -1
 				break
 			when /is already missing that!|does not have a/
 				badAim = true
@@ -170,10 +171,8 @@ attack = proc { |target|
 		end
 		res = AttackResult.new()
 		#Try one a second to attack until we parse a valid attack
-		while res.position == -1
-			fput "#{@action} ##{target.id} #{location}"
-			res = parse_attack_block.call
-		end
+		fput "#{@action} ##{target.id} #{location}"
+		res = parse_attack_block.call
 	end
 	res
 }
@@ -343,7 +342,10 @@ while @target.status !~ /dead|gone/
 	#Store state for only testing for tierup events
 	currentAttackResult = nextAttackResult
 	#Make attacks
-  nextAttackResult = attack.call @target
+  temp = attack.call @target
+	if temp.position != -1
+	  nextAttackResult = temp
+	end
 	#Reset location for tooHigh option
 	if resetLocation
 		@location = locations.pop
