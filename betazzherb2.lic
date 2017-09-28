@@ -470,11 +470,11 @@ end
 herb
 }
 
+foragename = get_foragename.call herb
+
 target_list.each { |herb_room|
 
   get_to_dest.call herb_room
-
-  foragename = get_foragename.call herb
 
   if Spell[213].known? and settings['sanct_rooms']
     need_sanct = true
