@@ -1,0 +1,58 @@
+=begin
+  errand.lic
+
+  Waits for an experience pulse, then ;go2's the room you want, so you don't
+  waste your prescious, precious 3x.
+
+  Author: Gnomad
+  Version: 0.2
+
+  changelog:
+    0.2
+      Added ability to accept a command to execute at the errand location
+
+=end
+
+if script.vars.length < 2 || script.vars[1] == "help"
+  respond "Do quick errands in between pulses!"
+  respond "Usage: #{$lich_char}#{script.name} location [separator][commands]"
+  respond ""
+  respond "Options:"
+  respond "  location: Defines the location to go2 once a pulse immediately after the next pulse"
+  respond "  separator: first non-whitespace character after the location defines the separate which will be used to separate all commands to be executed."
+  respond "  command: If defined, these commands will be executed at the specified location, before returning to the original location."
+  exit
+end
+
+exper = XMLData.next_level_text
+
+target_room = script.vars[1]
+return_room = nil
+cmds = []
+#Additional arguments
+if script.vars.length > 2
+  return_room = Room.current.id
+  separator = script.vars[2].strip()[0]
+  cmds = script.vars[2..-1].join(" ").split(separator)
+end
+
+wait_while { XMLData.next_level_text == exper }
+
+start_script 'go2', [target_room]
+wait_while {running? 'go2'}
+
+cmds.each {|cmd|
+  if cmd.empty?
+    next
+  end
+  if cmd[0] == $lich_char
+    scriptname, args = cmd.split(" ", 2)
+    scriptname = scriptname[1..-1]
+    Script.run scriptname, args
+    wait_while {running? scriptname}
+  else
+    fput cmd
+  end
+}
+
+start_script 'go2', [return_room] if return_room
