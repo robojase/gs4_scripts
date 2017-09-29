@@ -503,7 +503,6 @@ target_list.each { |herb_room|
   ## forage loop ##
   # All bonuses pulled from GSWiki. Blame them, not me (or Zzentar)
   loop {
-
     if die_early or herb_count >= qty
       echo "task done"
       fill_hands if settings['stow_stuff']
@@ -540,31 +539,31 @@ target_list.each { |herb_room|
     end
 
     #FIXME: This does not handle script pausing
-    forage_result = dothistimeout 'forage for ' + foragename, 5, /^You forage|^You make so much noise that only the dead would not notice you thrashing about in your unsuccessful search\.$|^You stumble about in a fruitless attempt at foraging\.$|you are unable to find anything useful|^As you carefully forage around you (can find no hint|see no evidence) of what you are looking for\.|you are fairly certain this is where it can be found|^You begin to forage around when your hand comes into contact with something that stabs you in the finger\.$|^As you forage around you suddenly feel a sharp pain in your right hand!|^You begin to forage around when suddenly you feel a burning sensation in your hand\.$|^You fumble about so badly in your search that you can only hope no one was watching you\.$/
-      waitrt?
-      if forage_result =~ /^You forage briefly and manage to find/
-        if righthand
-          stow_herb.call GameObj.right_hand
-        else
-          stow_herb.call GameObj.left_hand
-        end
-        herb_count += 1
-      elsif forage_result =~ /^As you forage around you suddenly feel a sharp pain in your right hand!/
-        heal_self.call
-      elsif forage_result =~ /fairly certain this is where it can be found./
-        echo 'This is a night-only or day-only herb, and you are foraging at the wrong time of day for it.'
-        echo 'Try again later or earlier.'
-        fill_hands if settings['stow_stuff']
-        die_early = true
-        break
-      elsif forage_result =~ /you are unable to find anything useful|^As you carefully forage around you (can find no hint|see no evidence) of what you are looking for\./
-          echo "bad room or its foraged out"
-          fill_hands if settings['stow_stuff']
-          break
-      else #Uncertain, try again
-        sleep 0.5
+    forage_result = dothistimeout "forage for #{foragename}", 5, /^You forage|^You make so much noise that only the dead would not notice you thrashing about in your unsuccessful search\.$|^You stumble about in a fruitless attempt at foraging\.$|you are unable to find anything useful|^As you carefully forage around you (can find no hint|see no evidence) of what you are looking for\.|you are fairly certain this is where it can be found|^You begin to forage around when your hand comes into contact with something that stabs you in the finger\.$|^As you forage around you suddenly feel a sharp pain in your right hand!|^You begin to forage around when suddenly you feel a burning sensation in your hand\.$|^You fumble about so badly in your search that you can only hope no one was watching you\.$/
+    waitrt?
+    if forage_result =~ /^You forage briefly and manage to find/
+      if righthand
+        stow_herb.call GameObj.right_hand
+      else
+        stow_herb.call GameObj.left_hand
       end
-    }
+      herb_count += 1
+    elsif forage_result =~ /^As you forage around you suddenly feel a sharp pain in your right hand!/
+      heal_self.call
+    elsif forage_result =~ /fairly certain this is where it can be found./
+      echo 'This is a night-only or day-only herb, and you are foraging at the wrong time of day for it.'
+      echo 'Try again later or earlier.'
+      fill_hands if settings['stow_stuff']
+      die_early = true
+      break
+    elsif forage_result =~ /you are unable to find anything useful|^As you carefully forage around you (can find no hint|see no evidence) of what you are looking for\./
+        echo "bad room or its foraged out"
+        fill_hands if settings['stow_stuff']
+        break
+    else #Uncertain, try again
+      sleep 0.5
+    end
+  }
 
     #Quit while
     if die_early or herb_count >= qty
