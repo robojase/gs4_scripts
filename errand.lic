@@ -19,8 +19,13 @@ if script.vars.length < 2 || script.vars[1] == "help"
   respond ""
   respond "Options:"
   respond "  location: Defines the location to go2 once a pulse immediately after the next pulse"
-  respond "  separator: first non-whitespace character after the location defines the separate which will be used to separate all commands to be executed."
+  respond "  separator: If the first character of the argument after location is not an alphanumeric chracter or #{$lich_char}, it will be used to break up multiple commands."
   respond "  command: If defined, these commands will be executed at the specified location, before returning to the original location."
+  respond "Examples:"
+  respond ""
+  respond "  ;errand gemshop - Runs to the gemshop post-pulse"
+  respond "  ;errand bank deposit all - Deposit silvers at the local bank, then return to original room"
+  respond "  ;errand furrier /;foreach skin in my backpack; sell/;go2 bank/deposit all - Sell all skins in my backpack, then deposit silvers at the bank, then return to the original room."
   exit
 end
 
@@ -33,7 +38,11 @@ cmds = []
 if script.vars.length > 2
   return_room = Room.current.id
   separator = script.vars[2].strip()[0]
-  cmds = script.vars[2..-1].join(" ").split(separator)
+  if separator =~ /\w|#{$lich_char}/
+    cmds = [script.vars[2..-1]]
+  else
+    cmds = script.vars[2..-1].join(" ").split(separator)
+  end
 end
 
 wait_while { XMLData.next_level_text == exper }
