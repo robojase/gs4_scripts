@@ -39,7 +39,7 @@ if script.vars.length > 2
   return_room = Room.current.id
   separator = script.vars[2].strip()[0]
   if separator =~ /\w|#{$lich_char}/
-    cmds = [script.vars[2..-1]]
+    cmds = [script.vars[2..-1].join(" ")]
   else
     cmds = script.vars[2..-1].join(" ").split(separator)
   end
