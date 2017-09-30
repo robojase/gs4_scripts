@@ -1,0 +1,186 @@
+=begin
+    Keeps spells active. This script can be used in place of
+    sigils/signs and will keep any spell in the list active.
+
+    Usage: ;spellactive help
+
+     author: spiffyjr
+      email: theman@spiffyjr.me
+       name: SpellActive
+       tags: spells
+    version: 1.0
+=end
+
+script.want_downstream = false
+clear
+
+settings = CharSettings.to_hash
+settings['spells'] ||= Hash.new
+
+@SpellInfo = {
+  606 => {:outside=> true},
+  640 => {:outside=> true},
+  1107 => {:cooldown=> 9010},
+  9603 => {:cooldown=> 9604},
+  9605 => {:cooldown=> 9606},
+  9625 => {:cooldown=> 9051},
+  9627 => {:cooldown=> 9052},
+  9705 => {:conflicts=> 9715},
+  9715 => {:overrides=> 9705},
+  9812 => {:cooldown=> 9049},
+  9813 => {:cooldown=> 9048},
+  9905 => {:conflicts=> 9909},
+  9909 => {:overrides=> 9905}
+}
+
+@SpellDefaults = {
+  606=> {:outside=> true, :cooldown=> false},
+  640=> {:outside=> true, :cooldown=> false},
+  9603=> {:cooldown=> 180}
+}
+
+@SpellCooldowns = {}
+
+get_spell = proc { |input|
+    input.gsub!(/^\w+\s/, '')
+    spell = Spell[input]
+    if not spell
+        echo "Could not find spell: " + input.to_s
+        exit
+    end
+    spell
+}
+
+case script.vars[1]
+	when /^add$/i
+		if script.vars[2].nil?
+			echo "You're doing it wrong"
+			exit
+		end
+
+    spell = get_spell.call(script.vars[0])
+
+		if settings['spells'].include?(spell.num)
+			echo "You are already keeping #{spell.name} active"
+			exit
+		end
+
+		if not spell.known?
+			echo "You do not know #{spell.name}"
+			exit
+		end
+
+		settings['spells'][spell.num] = @SpellDefaults.fetch(spell.num, nil) || {:cooldown => false}
+		echo "Added #{spell.name}"
+	when /^(?:delete|del|remove|rem|rm)$/i
+		if script.vars[2].nil?
+			echo "You're doing it wrong"
+			exit
+		end
+
+		spell = get_spell.call(script.vars[0])
+
+		if not settings['spells'].include?(spell.num)
+			echo "You are not keeping #{spell.name} active"
+			exit
+		end
+
+		settings['spells'].delete(spell.num)
+		echo "Removed #{spell.name}"
+	when /^list$/i
+		echo "Spell list"
+		settings['spells'].sort.each { |spell| echo sprintf '%4d: %s', spell, Spell[spell].name }
+	when /^(?:help|\?)$/
+		echo "Spell Active Help"
+		echo sprintf '%10s          %s', 'add [num|name]', 'add a spell to the list'
+		echo sprintf '%10s          %s', 'del [num|name]', 'delete a spell from the list'
+		echo sprintf '%10s          %s', 'list', 'list spells you are keeping active'
+end
+
+exit unless script.vars[1].nil?
+
+def maintain_spell spell, conditions
+  #Ensures that all given spells are active, and casts to refresh them, assuming spells are affordable.
+  return unless spell.known? && spell.affordable? && !spell.active?
+
+  @room_blocks ||= {}
+
+  #Check that sufficient resources as maintained before casting
+  after_mana = checkmana - spell.mana_cost
+  after_stamina = checkstamina - spell.stamina_cost
+  min_mana = conditions.fetch('min_mana', nil)
+  max_mana = conditions.fetch('max_mana', nil)
+  min_stamina = conditions.fetch('min_stamina', nil)
+  max_stamina = conditions.fetch('max_stamina', nil)
+  valid_cost = (!min_mana || after_mana < min_mana) && (!max_mana || checkmana >= max_mana)
+  valid_cost = valid_cost && (!min_stamina || after_stamina < min_stamina) && (!max_stamina || checkstamina >= max_stamina)
+  valid_cost = valid_cost && (spell.spirit_cost.zero? or (percentspirit > 75 and spirit_count < 2))
+  if valid_cost && @room_blocks.fetch(spell.num, nil) != XMLData.room_count
+    #Handle any special cases
+    if info = @SpellInfo.fetch(spell.num, false)
+      # Handle spells with cooldowns
+      return if cooldown = info.fetch(:cooldown, false) && (Spell[cooldown].active? && !conditions.fetch(:cooldown, false))
+      return if conditions.fetch(:hostiles, false) && GameObj.npcs.none? { |npc| npc.type !~ /passive|pet|familiar|companion/ }
+
+      #Cast Nature's Touch if indoors, required, and desired
+      if info.fetch(:outside, false) && !Room.current.outdoors? && conditions.fetch(:outdoors, false)
+        touch = Spell[625]
+        touch.cast if touch.known? && touch.affordable?
+      end
+    end
+    waitcastrt?
+    clear
+    Script.current.want_downstream = true
+    result = spell.cast
+    if result =~ /^The power from your sign dissipates into the air\.|^Your magic fizzles ineffectually\.|^You realize your powers would be useless here, and cease your action\.|^I don't think so/
+      @room_blocks[spell.num] = XMLData.room_count
+    else
+      @room_blocks.delete spell.num
+		end
+    Script.current.want_downstream = false
+    clear
+  end
+end
+
+loop {
+  wait_while { dead? }
+	settings['spells'].each_pair { |spellnum, conditions|
+	spell = Spell[spellnum]
+
+	unless spell.active?
+		wait_while { muckled? or (checkprep != 'None') }
+		waitcastrt?
+		waitrt?
+
+		# Stagger signs that use spirit (thanks Tillmen!)
+		spirit_count = 0;
+		[Spell['Sign of Swords'], Spell['Sign of Shields'], Spell['Sign of Dissipation']].each { |sn|
+			spirit_count += 1 if sn.active? and (sn.time_per - sn.timeleft) < 3
+		}
+
+		#Checks to deal with staggerinf spells
+		if spell.spirit_cost.zero? || spirit_count < 2
+			next if (spell.name == 'Sign of Clotting' and Spell['Sign of Staunching'].active?)
+
+			was_hidden = hidden?
+
+      maintain_spell spell, conditions
+
+			fput "hide" if was_hidden and !hidden?
+		end
+	end
+
+	# Sigil of Power
+	if (maxmana - checkmana) > 25 and Spell['Sigil of Power'].known? and Spell['Sigil of Power'].affordable?
+		waitcastrt?
+		waitrt?
+
+		script.want_downstream = true
+		fput "sigil of power"
+		script.want_downstream = false
+		sleep 1
+	end
+	}
+
+	sleep 0.25
+}
