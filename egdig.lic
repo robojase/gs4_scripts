@@ -1,0 +1,131 @@
+# Version 3.5.2 Taleph.
+# This version uses your lootsack variable. You set it before you run this program, and you only need to do it once: ;vars set lootsack=longcoat (for example).
+
+@breakable_re = /sandstone$|rose$|muck$|sand$|excrement$|yellowed glass jar$|debris$|slime$|crumbly rock$|dirt$/
+
+def dig
+	loop {
+		clear
+		waitrt?
+		fput "dig"
+		test = matchtimeout 11, "You continue", "You hit", "You begin"
+		waitrt?
+		if test =~ /You hit/
+			waitrt?
+			loop {
+				if "#{GameObj.right_hand}" == "shovel"
+					fput "stow ##{GameObj.right_hand.id}"
+				else
+					break
+				end
+			}
+			break
+		end
+	}
+end
+
+def stow_breakable item
+	fput "rub ##{item.id}"
+	while line = get
+		if line =~ /Pondering what could have fallen from .*, you glance around\.  You notice .* on the ground/
+			fput "stow ##{GameObj.left_hand.id}"
+			break
+		elsif line =~ /Glancing around, you notice some silver coins scattered across the ground./
+			waitrt?
+			fput "get coins"
+			waitrt?
+			break
+		end
+	end
+end
+
+def OpenIt(item_found)
+	lootsack = GameObj.inv.find {|item| item.name =~ /#{Vars.lootsack}/}
+
+	fput "look in ##{item_found.id}"
+	sleep 0.2
+	item_found.contents.each { |item|
+		waitrt?
+		case item.noun
+		when /seashells/
+			if seashells = lootsack.contents.find {|item| item.noun == "seashells"}
+				multifput "get ##{item.id}", "stow ##{item_found.id}"
+				multifput "get ##{seashells.id}", "bundle", "stow seashells"
+				fput "get ##{item_found.id}"
+			end
+		when /coins/
+			fput "get coins from ##{item_found.id}"
+			sleep 0.4
+			waitrt?
+		when @breakable_re
+			fput "get ##{item.id}"
+			stow_breakable item
+			waitrt?
+		else
+			respond "**************"
+			respond "Stashing #{item.name}"
+			fput "_drag ##{item.id} ##{lootsack.id}"
+		end
+	}
+	waitrt?
+	fput "put ##{item_found.id} in hole"
+	line = matchtimeout 5, "You put", "You can't", "won't fit"
+	if  line =~ /can't|won't fit/
+		Script.current.exit
+	end
+end
+
+loop	{
+	fput "get my shovel"
+	test = matchwait "You remove", "You already", "Get what", "Hey, that", "You grab"
+	if test !~ /^You/
+		respond "No shovel found, bailing."
+		exit
+	end
+
+	dig
+
+	item_found = GameObj.left_hand
+
+	fput "glance"
+	while line = get
+		if line =~ /You glance down to see .* in your right hand and a ([\w' ]+) in your left hand\./
+			item_name = $1
+			break
+		end
+	end
+
+	respond "Found name is #{item_found}"
+	case item_name
+	when @breakable_re
+		stow_breakable item_found
+	when /box|trunk|chest|coffer|strongbox|crate|coffin|casket|sarcophagus/
+		if item_name !~ /grimy|rotted|rusted|stained|warped|corroded|damaged|marred|dented|battered/
+			respond "*****************************"
+			respond "*****************************"
+			respond "*****************************"
+			respond "          WTF mate?"
+			respond "*****************************"
+			respond "*****************************"
+			respond "*****************************"
+			Script.current.pause
+		end
+		if item_name =~ /coffin|casket|sarcophagus/
+			loop	{					#just making sure the lid comes off
+				fput "pry my #{item_found}"
+				test = matchtimeout 5, "With the lid loosened, you", "You begin"
+				waitrt?
+				words = test.split(' ')
+				if words[2] == "lid"
+					break
+				end
+				}
+		else
+			fput "open ##{GameObj.left_hand.id}"
+		end
+		OpenIt(GameObj.left_hand)
+	else
+		waitrt?
+		fput "put ##{item_found.id} in my #{Vars.lootsack}"
+	end
+	}
