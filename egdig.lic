@@ -1,7 +1,7 @@
 # Version 3.5.2 Taleph.
 # This version uses your lootsack variable. You set it before you run this program, and you only need to do it once: ;vars set lootsack=longcoat (for example).
 
-@breakable_re = /sandstone$|rose$|muck$|sand$|excrement$|yellowed glass jar$|debris$|slime$|crumbly rock$|dirt$/
+@breakable_re = /sandstone$|rose$|muck$|sand$|excrement$|yellowed glass jar$|debris$|slime$|crumbly rock$|dirt$|petrified root$|flesh$|charcoal$/
 
 def dig
 	loop {
@@ -27,7 +27,8 @@ end
 def stow_breakable item
 	fput "rub ##{item.id}"
 	while line = get
-		if line =~ /Pondering what could have fallen from .*, you glance around\.  You notice .* on the ground/
+		if line =~ /Pondering what could have fallen from .*, you glance around\.  You notice (?:a|an) (.*) on the ground/
+			waitrt?
 			fput "stow ##{GameObj.left_hand.id}"
 			break
 		elsif line =~ /Glancing around, you notice some silver coins scattered across the ground./
@@ -42,18 +43,14 @@ end
 def OpenIt(item_found)
 	lootsack = GameObj.inv.find {|item| item.name =~ /#{Vars.lootsack}/}
 
-	fput "look in ##{item_found.id}"
+	dothistimeout "look in ##{item_found.id}", 5, /^In the/
 	sleep 0.2
 	item_found.contents.each { |item|
 		waitrt?
-		case item.noun
-		when /seashells/
-			if seashells = lootsack.contents.find {|item| item.noun == "seashells"}
-				multifput "get ##{item.id}", "stow ##{item_found.id}"
-				multifput "get ##{seashells.id}", "bundle", "stow seashells"
-				fput "get ##{item_found.id}"
-			end
-		when /coins/
+		case item.name
+		when /seashells$/
+			multifput "get ##{item.id}", "put ##{item.id} in bucket"
+		when /coins$/
 			fput "get coins from ##{item_found.id}"
 			sleep 0.4
 			waitrt?
@@ -62,14 +59,15 @@ def OpenIt(item_found)
 			stow_breakable item
 			waitrt?
 		else
-			respond "**************"
-			respond "Stashing #{item.name}"
+			respond "*********************"
+			respond "#{monsterbold_start}Stashing #{item.name}#{monsterbold_end}\n"
+			respond "*********************"
 			fput "_drag ##{item.id} ##{lootsack.id}"
 		end
 	}
 	waitrt?
 	fput "put ##{item_found.id} in hole"
-	line = matchtimeout 5, "You put", "You can't", "won't fit"
+	line = matchtimeout 5, "you feel pleased with yourself at having cleaned up the surrounding area"
 	if  line =~ /can't|won't fit/
 		Script.current.exit
 	end
@@ -104,7 +102,7 @@ loop	{
 			respond "*****************************"
 			respond "*****************************"
 			respond "*****************************"
-			respond "          WTF mate?"
+			respond "#{monsterbold_start}          WTF mate?#{monsterbold_end}"
 			respond "*****************************"
 			respond "*****************************"
 			respond "*****************************"
